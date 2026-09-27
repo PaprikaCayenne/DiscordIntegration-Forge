@@ -13,16 +13,16 @@ plugins {
     id 'java'
     id 'idea'
     id "com.modrinth.minotaur" version "2.+"
-    id 'com.github.johnrengelman.shadow' version '8.1.1+'
-    id 'net.neoforged.gradle.userdev' version '7.0.109'
-
+    id 'io.github.goooler.shadow' version '8.1.8'
+    id 'net.neoforged.gradle.userdev' version '7.0.145'
+    id 'net.neoforged.gradle.mixin' version '7.0.145'
 }
 apply plugin: 'eclipse'
 apply plugin: 'maven-publish'
 
 
 //Build variables
-version = "3.0.7"
+version = "3.0.8"
 group = "de.erdbeerbaerlp.dcintegration"
 archivesBaseName = "dcintegration-neoforge"
 
@@ -46,6 +46,11 @@ repositories {
         dirs 'libs'
     }
     maven { url "https://repo.erdbeerbaerlp.de/repository/maven-public/" }
+}
+
+//Mixin config
+mixin {
+    config 'mixins.dcintegration.json'
 }
 
 //ShadowJar
@@ -82,7 +87,7 @@ dependencies {
     }
 
     // =========  NeoForge =============
-    implementation "net.neoforged:neoforge:20.6.48-beta"
+    implementation "net.neoforged:neoforge:21.1.172"
 
     //Dynmap-API
     compileOnly('com.github.webbukkit:DynmapCoreAPI:2.5')

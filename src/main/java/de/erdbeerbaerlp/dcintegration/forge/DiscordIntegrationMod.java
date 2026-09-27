@@ -6,8 +6,7 @@ import dcshadow.net.kyori.adventure.text.Component;
 import dcshadow.net.kyori.adventure.text.serializer.gson.GsonComponentSerializer;
 import de.erdbeerbaerlp.dcintegration.common.DiscordIntegration;
 import de.erdbeerbaerlp.dcintegration.common.WorkThread;
-import de.erdbeerbaerlp.dcintegration.common.addon.AddonLoader;
-import de.erdbeerbaerlp.dcintegration.common.addon.DiscordAddonMeta;
+
 import de.erdbeerbaerlp.dcintegration.common.compat.DynmapListener;
 import de.erdbeerbaerlp.dcintegration.common.minecraftCommands.MCSubCommand;
 import de.erdbeerbaerlp.dcintegration.common.minecraftCommands.McCommandRegistry;
@@ -18,7 +17,6 @@ import de.erdbeerbaerlp.dcintegration.common.storage.linking.LinkManager;
 import de.erdbeerbaerlp.dcintegration.common.util.*;
 import de.erdbeerbaerlp.dcintegration.forge.api.ForgeDiscordEventHandler;
 import de.erdbeerbaerlp.dcintegration.forge.command.McCommandDiscord;
-import de.erdbeerbaerlp.dcintegration.forge.metrics.Metrics;
 import de.erdbeerbaerlp.dcintegration.forge.util.ForgeMessageUtils;
 import de.erdbeerbaerlp.dcintegration.forge.util.ForgeServerInterface;
 import net.dv8tion.jda.api.EmbedBuilder;
@@ -75,11 +73,9 @@ public class DiscordIntegrationMod {
      */
     public static final ArrayList<UUID> timeouts = new ArrayList<>();
     private boolean stopped = false;
-    public static Metrics bstats;
 
     public DiscordIntegrationMod(IEventBus modEventBus) {
         LOGGER.info("Version is " + VERSION);
-        bstats = new Metrics(9765);
         try {
             //Create data directory if missing
             if (!discordDataDir.exists()) discordDataDir.mkdir();
@@ -162,12 +158,12 @@ public class DiscordIntegrationMod {
                                 .replace("%avatarURL%", avatarURL)
                                 .replace("%playerColor%", "" + TextColors.generateFromUUID(p.getUUID()).getRGB())
                         );
-                        DiscordIntegration.INSTANCE.sendMessage(new DiscordMessage(b.build()));
+                        DiscordIntegration.INSTANCE.sendMessage(new DiscordMessage(b.build()), INSTANCE.getChannel(Configuration.instance().advanced.serverChannelID));
                     } else {
                         final EmbedBuilder b = Configuration.instance().embedMode.playerJoinMessage.toEmbed();
                         b.setAuthor(ForgeMessageUtils.formatPlayerName(p), null, avatarURL)
                                 .setDescription(Localization.instance().playerJoin.replace("%player%", ForgeMessageUtils.formatPlayerName(p)));
-                        DiscordIntegration.INSTANCE.sendMessage(new DiscordMessage(b.build()));
+                        DiscordIntegration.INSTANCE.sendMessage(new DiscordMessage(b.build()), INSTANCE.getChannel(Configuration.instance().advanced.serverChannelID));
                     }
                 } else
                     DiscordIntegration.INSTANCE.sendMessage(Localization.instance().playerJoin.replace("%player%", ForgeMessageUtils.formatPlayerName(p)));
@@ -212,7 +208,7 @@ public class DiscordIntegrationMod {
                                     .replace("%avatarURL%", avatarURL)
                                     .replace("%playerColor%", "" + TextColors.generateFromUUID(ev.getEntity().getUUID()).getRGB())
                             );
-                            INSTANCE.sendMessage(new DiscordMessage(b.build()));
+                            INSTANCE.sendMessage(new DiscordMessage(b.build()), INSTANCE.getChannel(Configuration.instance().advanced.chatOutputChannelID));
                         } else {
                             EmbedBuilder b = Configuration.instance().embedMode.advancementMessage.toEmbed();
                             b = b.setAuthor(ForgeMessageUtils.formatPlayerName(ev.getEntity()), null, avatarURL)
@@ -233,7 +229,7 @@ public class DiscordIntegrationMod {
                                             .replace("\\n", "\n").replace("%advNameURL%", URLEncoder.encode(ChatFormatting.stripFormatting(ev.getAdvancement().value().display().get().getTitle().getString()), StandardCharsets.UTF_8))
                                             .replace("%advDescURL%", URLEncoder.encode(ChatFormatting.stripFormatting(ev.getAdvancement().value().display().get().getDescription().getString()), StandardCharsets.UTF_8))
                                     );
-                            INSTANCE.sendMessage(new DiscordMessage(b.build()));
+                            INSTANCE.sendMessage(new DiscordMessage(b.build()), INSTANCE.getChannel(Configuration.instance().advanced.chatOutputChannelID));
                         }
                     } else INSTANCE.sendMessage(Localization.instance().advancementMessage.replace("%player%",
                                     ChatFormatting.stripFormatting(ForgeMessageUtils.formatPlayerName(ev.getEntity())))
@@ -300,20 +296,6 @@ public class DiscordIntegrationMod {
             LOGGER.warn("Download this mod from an official source (https://www.curseforge.com/minecraft/mc-mods/dcintegration) to hide this message");
             LOGGER.warn("This warning can also be suppressed in the config file");
         }
-        bstats.addCustomChart(new Metrics.DrilldownPie("addons", () -> {
-            final Map<String, Map<String, Integer>> map = new HashMap<>();
-            if (Configuration.instance().bstats.sendAddonStats) {  //Only send if enabled, else send empty map
-                for (DiscordAddonMeta m : AddonLoader.getAddonMetas()) {
-                    final Map<String, Integer> entry = new HashMap<>();
-                    entry.put(m.getVersion(), 1);
-                    map.put(m.getName(), entry);
-                }
-            }
-            return map;
-        }));
-        bstats.addCustomChart(new Metrics.SimplePie("webhook_mode", () -> Configuration.instance().webhook.enable ? "Enabled" : "Disabled"));
-        bstats.addCustomChart(new Metrics.SimplePie("command_log", () -> !Configuration.instance().commandLog.channelID.equals("0") ? "Enabled" : "Disabled"));
-        bstats.addCustomChart(new Metrics.SimplePie("loader", () -> Metrics.capturedServer.get().getServerModName()));
     }
 
     @SubscribeEvent
@@ -430,7 +412,6 @@ public class DiscordIntegrationMod {
     }
     @SubscribeEvent
     public void serverStopping(ServerStoppedEvent ev) {
-        Metrics.MetricsBase.scheduler.shutdownNow();
         if (INSTANCE != null) {
             ev.getServer().executeBlocking(() -> {
                 INSTANCE.stopThreads();
@@ -499,14 +480,14 @@ public class DiscordIntegrationMod {
                                 .replace("%msg%", text)
                                 .replace("%playerColor%", "" + TextColors.generateFromUUID(ev.getPlayer().getUUID()).getRGB())
                         );
-                        INSTANCE.sendMessage(new DiscordMessage(b.build()));
+                        INSTANCE.sendMessage(new DiscordMessage(b.build()), channel);
                     } else {
                         EmbedBuilder b = Configuration.instance().embedMode.chatMessages.toEmbed();
                         if (Configuration.instance().embedMode.chatMessages.generateUniqueColors)
                             b = b.setColor(TextColors.generateFromUUID(ev.getPlayer().getUUID()));
                         b = b.setAuthor(ForgeMessageUtils.formatPlayerName(ev.getPlayer()), null, avatarURL)
                                 .setDescription(text);
-                        INSTANCE.sendMessage(new DiscordMessage(b.build()));
+                        INSTANCE.sendMessage(new DiscordMessage(b.build()), channel);
                     }
                 } else
                     INSTANCE.sendMessage(ForgeMessageUtils.formatPlayerName(ev.getPlayer()), ev.getPlayer().getUUID().toString(), new DiscordMessage(embed, text, true), channel);
@@ -543,10 +524,23 @@ public class DiscordIntegrationMod {
                             b.addBlankField(false);
                             b.addField(embed.getTitle() + " *(" + embed.getFooter().getText() + ")*", embed.getDescription(), false);
                         }
-                        INSTANCE.sendMessage(new DiscordMessage(b.build()));
+                        INSTANCE.sendMessage(new DiscordMessage(b.build()), INSTANCE.getChannel(Configuration.instance().advanced.deathsChannelID));
                     } else {
+                        final String deathText = ChatFormatting.stripFormatting(deathMessage.getString()).replace(ForgeMessageUtils.formatPlayerName(ev.getEntity()) + " ", "");
+                        final String deathEmoji;
+                        if (deathText.contains("slain by")) deathEmoji = "\u2694\uFE0F";
+                        else if (deathText.contains("shot by")) deathEmoji = "\uD83C\uDFF9";
+                        else if (deathText.contains("blown up")) deathEmoji = "\uD83D\uDCA5";
+                        else if (deathText.contains("fell")) deathEmoji = "\uD83E\uDE82";
+                        else if (deathText.contains("drowned")) deathEmoji = "\uD83C\uDF0A";
+                        else if (deathText.contains("burned") || deathText.contains("lava")) deathEmoji = "\uD83D\uDD25";
+                        else if (deathText.contains("withered")) deathEmoji = "\uD83D\uDC80";
+                        else if (deathText.contains("starved")) deathEmoji = "\uD83C\uDF56";
+                        else if (deathText.contains("magic") || deathText.contains("witch")) deathEmoji = "\uD83E\uDDD9";
+                        else deathEmoji = "\uD83D\uDC80";
                         final EmbedBuilder b = Configuration.instance().embedMode.deathMessage.toEmbed();
-                        b.setDescription(":skull: " + Localization.instance().playerDeath.replace("%player%", ForgeMessageUtils.formatPlayerName(ev.getEntity())).replace("%msg%", ChatFormatting.stripFormatting(deathMessage.getString()).replace(ForgeMessageUtils.formatPlayerName(ev.getEntity()) + " ", "")));
+                        b.setAuthor(ForgeMessageUtils.formatPlayerName(ev.getEntity()), null, avatarURL);
+                        b.setDescription(deathEmoji + " " + Localization.instance().playerDeath.replace("%player%", ForgeMessageUtils.formatPlayerName(ev.getEntity())).replace("%msg%", deathText));
                         if (embed != null) {
                             b.addBlankField(false);
                             b.addField(embed.getTitle() + " *(" + embed.getFooter().getText() + ")*", embed.getDescription(), false);
@@ -581,12 +575,12 @@ public class DiscordIntegrationMod {
                                 .replace("%avatarURL%", avatarURL)
                                 .replace("%playerColor%", "" + TextColors.generateFromUUID(player.getUUID()).getRGB())
                         );
-                        DiscordIntegration.INSTANCE.sendMessage(new DiscordMessage(b.build()));
+                        DiscordIntegration.INSTANCE.sendMessage(new DiscordMessage(b.build()), INSTANCE.getChannel(Configuration.instance().advanced.serverChannelID));
                     } else {
                         final EmbedBuilder b = Configuration.instance().embedMode.playerLeaveMessages.toEmbed()
                                 .setAuthor(ForgeMessageUtils.formatPlayerName(player), null, avatarURL)
                                 .setDescription(Localization.instance().playerLeave.replace("%player%", ForgeMessageUtils.formatPlayerName(player)));
-                        DiscordIntegration.INSTANCE.sendMessage(new DiscordMessage(b.build()));
+                        DiscordIntegration.INSTANCE.sendMessage(new DiscordMessage(b.build()), INSTANCE.getChannel(Configuration.instance().advanced.serverChannelID));
                     }
                 } else
                     DiscordIntegration.INSTANCE.sendMessage(Localization.instance().playerLeave.replace("%player%", ForgeMessageUtils.formatPlayerName(player)));
@@ -597,7 +591,7 @@ public class DiscordIntegrationMod {
                     final EmbedBuilder b = Configuration.instance().embedMode.playerLeaveMessages.toEmbed()
                             .setAuthor(ForgeMessageUtils.formatPlayerName(player), null, avatarURL)
                             .setDescription(Localization.instance().playerTimeout.replace("%player%", ForgeMessageUtils.formatPlayerName(player)));
-                    DiscordIntegration.INSTANCE.sendMessage(new DiscordMessage(b.build()));
+                    DiscordIntegration.INSTANCE.sendMessage(new DiscordMessage(b.build()), INSTANCE.getChannel(Configuration.instance().advanced.serverChannelID));
                 } else
                     DiscordIntegration.INSTANCE.sendMessage(Localization.instance().playerTimeout.replace("%player%", ForgeMessageUtils.formatPlayerName(player)));
             }
